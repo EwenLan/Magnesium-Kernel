@@ -1,0 +1,10 @@
+#ifndef MODULES_DEFINITION
+#define MODULES_DEFINITION 1
+#endif
+
+#define KERNEL 1
+#define USER_INTERFACE 3
+#define CAMERA 5
+#define NEURAL_NETWORK 7
+#define PAYMENT_MODULE 9
+#define DATABASE 2
