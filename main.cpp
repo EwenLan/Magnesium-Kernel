@@ -36,7 +36,47 @@
 #include "main.hpp"
 #endif
 
-extern int *GetPorts();
+// extern int *GetPorts();
+class goods
+{
+  public:
+    int goods_code;
+    int xmin;
+    int ymin;
+    int xmax;
+    int ymax;
+    int weight;
+    int unit_price;
+    int sum_price;
+    goods(int goods_code, int xmin, int ymin, int xmax, int ymax);
+    void caculatePrice()
+    {
+        // TODO: Read unit price from file.
+        switch (goods_code)
+        {
+        case 0x0101:
+            unit_price = 1;
+            break;
+        case 0x0201:
+            unit_price = 1;
+            break;
+        case 0x0301:
+            unit_price = 1;
+            break;
+        default:
+            unit_price = 1;
+        }
+        sum_price = unit_price * weight;
+    }
+};
+goods::goods(int goods_code, int xmin, int ymin, int xmax, int ymax)
+{
+    this->goods_code = goods_code;
+    this->xmin = xmin;
+    this->ymin = ymin;
+    this->xmax = xmax;
+    this->ymax = ymax;
+}
 enum status_type
 {
     standing_by,
@@ -47,186 +87,160 @@ enum status_type
 };
 enum module_type
 {
-    kernel = 1,
-    ui = 3,
-    camera = 5,
-    nn = 7,
-    payment = 9,
-    database = 2
+    kernel = 0x01,
+    database = 0x02,
+    debugger = 0x03,
+    ui = 0x04,
+    camera = 0x05,
+    nn = 0x06,
+    scale = 0x07,
+    payment = 0x08,
+    scanner = 0x09
 };
-enum message_type
+void RunModule(int moduleIndex, int kernel_port, int module_port)
 {
-    pid,
-    module_error,
-    start,
-    cancel,
-    quit,
-    img_path,
-    take_photo,
-    img_content,
-    pay_success,
-    pay_fail
-};
-void RunModule(const char command[])
-{
-    int failed_times = 0;
+    std::array<std::string, 10> module_path_table;
+    //TODO: Add every module in this table
+    module_path_table[3] = "./simulator";
+    char wholeCmd[256] = {0};
+    sprintf(wholeCmd, "%s %d %d", module_path_table[moduleIndex].c_str(), kernel_port, module_port);
+    int triedTimes = 0;
     int returnValue = 1;
     do
     {
-        returnValue = system(command);
-        failed_times += 1;
-    } while (returnValue != 0 && failed_times < 4);
+        returnValue = system(wholeCmd);
+        ++triedTimes;
+    } while (triedTimes < 3 && returnValue != 0);
+    //TODO: Deal with module fail.
 }
-int GetPID(std::string message)
+void string2array(std::string str, std::array<char, 252> dest_array)
 {
-    int x = message.find("PID");
-    int pid = -1;
-    if (x == 0)
+    for (int i = 0; i < (str.size() > 252 ? 252 : str.size()); ++i)
     {
-        pid = std::stoi(message.substr(4, 5), nullptr, 10);
+        dest_array[i] = str[i];
     }
-    return pid;
 }
-int GetMessageType(std::string message)
+void SendMessage(std::array<char, 252> message, enum module_type to, int instruction_loop, std::array<int, 10> port_table)
 {
-    if (message.find_first_of("PID"))
-        return pid;
-    if (message.find_first_of("ERROR"))
-        return error;
-    if (message.find_first_of("START"))
-        return start;
-    if (message.find_first_of("CANCEL"))
-        return cancel;
-    if (message.find_first_of("QUIT"))
-        return quit;
-    if (message.find_first_of("PATH"))
-        return img_path;
-    if (message.find_first_of("TAKE_PHOTO"))
-        return take_photo;
-    if (message.find_first_of("CONTENT"))
-        return img_content;
-    return -1;
+    char finalMessage[256] = {0};
+    for (int i = 0; i < (message.size() > 252 ? 252 : message.size()); ++i)
+    {
+        finalMessage[4 + i] = message[i];
+    }
+    finalMessage[0] = (instruction_loop & 0x0000ff00) >> 8;
+    finalMessage[1] = instruction_loop & 0x000000ff;
+    finalMessage[2] = 0x01;
+    finalMessage[3] = (int)to;
+    int module_sockfd = 0;
+    int moduel_len = 0;
+    struct sockaddr_in module_addr;
+    module_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    module_addr.sin_family = AF_INET;
+    module_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    module_addr.sin_port = htons(port_table[to]);
+    moduel_len = sizeof(module_addr);
+    int result = connect(module_sockfd, (struct sockaddr *)&module_addr, moduel_len);
+    // TODO: Deal with connection fail.
+    write(module_sockfd, finalMessage, 256);
+    close(module_sockfd);
 }
-bool IsLegalInstruction(enum module_type mod, enum message_type msg)
+void KillByPid(int pid)
 {
-    char law[10][10];
-    //  pid            error          start          cancel         quit           img_path       take_photo     img_content    pay_success    pay_fail
-    law[0][0] = 0;
-    law[0][1] = 0;
-    law[0][2] = 0;
-    law[0][3] = 0;
-    law[0][4] = 0;
-    law[0][5] = 0;
-    law[0][6] = 0;
-    law[0][7] = 0;
-    law[0][8] = 0;
-    law[0][9] = 0; //none
-    law[1][0] = 1;
-    law[1][1] = 1;
-    law[1][2] = 1;
-    law[1][3] = 1;
-    law[1][4] = 1;
-    law[1][5] = 1;
-    law[1][6] = 1;
-    law[1][7] = 1;
-    law[1][8] = 1;
-    law[1][9] = 1; //kernel
-    law[2][0] = 1;
-    law[2][1] = 1;
-    law[2][2] = 1;
-    law[2][3] = 1;
-    law[2][4] = 1;
-    law[2][5] = 1;
-    law[2][6] = 1;
-    law[2][7] = 1;
-    law[2][8] = 1;
-    law[2][9] = 1; //database
-    law[3][0] = 0;
-    law[3][1] = 0;
-    law[3][2] = 0;
-    law[3][3] = 0;
-    law[3][4] = 0;
-    law[3][5] = 0;
-    law[3][6] = 0;
-    law[3][7] = 0;
-    law[3][8] = 0;
-    law[3][9] = 0; //ui
-    law[4][0] = 0;
-    law[4][1] = 0;
-    law[4][2] = 0;
-    law[4][3] = 0;
-    law[4][4] = 0;
-    law[4][5] = 0;
-    law[4][6] = 0;
-    law[4][7] = 0;
-    law[4][8] = 0;
-    law[4][9] = 0; //none
-    law[5][0] = 0;
-    law[5][1] = 0;
-    law[5][2] = 0;
-    law[5][3] = 0;
-    law[5][4] = 0;
-    law[5][5] = 0;
-    law[5][6] = 0;
-    law[5][7] = 0;
-    law[5][8] = 0;
-    law[5][9] = 0; //camera
-    law[6][0] = 0;
-    law[6][1] = 0;
-    law[6][2] = 0;
-    law[6][3] = 0;
-    law[6][4] = 0;
-    law[6][5] = 0;
-    law[6][6] = 0;
-    law[6][7] = 0;
-    law[6][8] = 0;
-    law[6][9] = 0; //none
-    law[7][0] = 0;
-    law[7][1] = 0;
-    law[7][2] = 0;
-    law[7][3] = 0;
-    law[7][4] = 0;
-    law[7][5] = 0;
-    law[7][6] = 0;
-    law[7][7] = 0;
-    law[7][8] = 0;
-    law[7][9] = 0; //nn
-    law[8][0] = 0;
-    law[8][1] = 0;
-    law[8][2] = 0;
-    law[8][3] = 0;
-    law[8][4] = 0;
-    law[8][5] = 0;
-    law[8][6] = 0;
-    law[8][7] = 0;
-    law[8][8] = 0;
-    law[8][9] = 0; //none
-    law[9][0] = 0;
-    law[9][1] = 0;
-    law[9][2] = 0;
-    law[9][3] = 0;
-    law[9][4] = 0;
-    law[9][5] = 0;
-    law[9][6] = 0;
-    law[9][7] = 0;
-    law[9][8] = 0;
-    law[9][9] = 0; //payment
-    if (mod >= 0 && mod <= 9 && msg >= 0 && msg <= 9)
-        return law[mod][msg];
-    return 0;
+    // TODO: Kill a task by pid.
+}
+void HandleMessage(std::array<char, 256> instruction, int local_instruction_loop, std::array<unsigned int, 10> pid_table, std::array<int, 10> port_table, std::vector<goods> shopping_list, int &current_goods_code, unsigned int &current_goods_weight, int &current_goods_xmin, int &current_goods_ymin, int &current_goods_xmax, int &current_goods_ymax)
+{
+    std::array<char, 256> copiedInstruction(instruction);
+    enum module_type from_module = (enum module_type)copiedInstruction[2];
+    enum module_type to_module = (enum module_type)copiedInstruction[3];
+    int recv_instruction_loop = (copiedInstruction[0] << 8) | copiedInstruction[1];
+    int command = (copiedInstruction[4] << 8) | copiedInstruction[5];
+    std::array<char, 250> argument = {0};
+    std::array<char, 252> send_instruction = {0};
+    for (int i = 0; i < 250; ++i)
+    {
+        argument[i] = copiedInstruction[6 + i];
+    }
+    if (to_module == kernel && recv_instruction_loop == local_instruction_loop)
+    {
+        if (command == 0x0001)
+        {
+            // pid_table[from_module] = (argument[0] << 24) | (argument[1] << 16) | (argument[2] << 8) | argument[3];
+            pid_table[from_module] = (argument[0] << 8) | argument[1];
+        }
+        else if (command == 0x0002)
+        {
+            KillByPid(pid_table[from_module]);
+        }
+        else if (command == 0x0401)
+        {
+            send_instruction[0] = 0x01;
+            send_instruction[1] = 0x01;
+            std::thread sendInstructionToCamera(SendMessage, send_instruction, camera, local_instruction_loop, port_table);
+            send_instruction[1] = 0x02;
+            std::thread sendInstructionToScale(SendMessage, send_instruction, scale, local_instruction_loop, port_table);
+            sendInstructionToCamera.join();
+            sendInstructionToScale.join();
+        }
+        else if (command == 0x0701)
+        {
+            if (current_goods_code != 0)
+            {
+                shopping_list.push_back(goods(current_goods_code, current_goods_xmin, current_goods_ymin, current_goods_xmax, current_goods_ymax));
+                shopping_list[shopping_list.size() - 1].caculatePrice();
+                // TODO: Send message to ui. -- June 17 2018 Ewen Lan
+                current_goods_code = 0;
+                current_goods_weight = 0;
+            }
+            else
+            {
+                current_goods_weight = (argument[0] << 24) | (argument[1] << 16) | (argument[2] << 8) | argument[3];
+            }
+        }
+        else if (command == 0x0601)
+        {
+            current_goods_code = (argument[0] << 8) | argument[1];
+            current_goods_xmin = (argument[2] << 8) | argument[3];
+            current_goods_ymin = (argument[4] << 8) | argument[5];
+            current_goods_xmax = (argument[6] << 8) | argument[7];
+            current_goods_ymax = (argument[8] << 8) | argument[9];
+            if (current_goods_weight != 0)
+            {
+                shopping_list.push_back(goods(current_goods_code, current_goods_xmin, current_goods_ymin, current_goods_xmax, current_goods_ymax));
+                shopping_list[shopping_list.size() - 1].caculatePrice();
+                current_goods_code = 0;
+                current_goods_weight = 0;
+            }
+        }
+    }
 }
 int main(int argc, char *argv[])
 {
-    volatile char status_table[10] = {0};
-    volatile int pid_table[10] = {0};
+    std::array<int, 10> status_table = {0};
+    std::array<unsigned int, 10> pid_table = {0};
     volatile int instruction_loop = 1;
+    std::vector<goods> shopping_list;
+    std::array<int, 10> port_table = {0};
+    int current_goods_code = 0;
+    unsigned int current_weight = 0;
+    //TODO: Generate port_table automatically.
+    port_table[1] = 2334;
+    port_table[2] = 2335;
+    port_table[3] = 2336;
+    port_table[4] = 2337;
+    port_table[5] = 2338;
+    port_table[6] = 2339;
+    port_table[7] = 2340;
+    port_table[8] = 2341;
+    port_table[9] = 2342;
+    std::array<std::thread, 10> thread_table;
     for (auto &i : status_table)
         i = -1;
     for (auto &i : pid_table)
         i = -1;
-    std::thread testSubTask(RunModule, "./simulator 2334 2335"); // module: database
+    thread_table[debugger] = std::thread(RunModule, debugger, port_table[kernel], port_table[debugger]);
     //TODO: Run all subtasks.
-    status_table[database] = started;
+    status_table[debugger] = started;
     //TODO: Set status for each modules.
 
     int kernel_socketfd = 0;
@@ -246,24 +260,18 @@ int main(int argc, char *argv[])
     while (true)
     {
         client_socketfd = accept(kernel_socketfd, (struct sockaddr *)&client_addr, (socklen_t *)&client_socket_len);
-        char buffer[257] = {0};
+        char buffer[256] = {0};
         int n = read(client_socketfd, buffer, 256);
+        close(client_socketfd);
         enum module_type from;
         enum module_type to;
         int recv_instruction_loop = buffer[0] << 8 | buffer[1];
         from = (enum module_type)buffer[2];
         to = (enum module_type)buffer[3];
-        std::string message = &buffer[4];
-        int pid = GetPID(message);
-        if (pid > 1)
+        std::array<char, 252> message;
+        for (int i = 0; i < 252; ++i)
         {
-            status_table[from] = standing_by;
+            message[i] = buffer[i + 4];
         }
-        else
-        {
-        }
-        std::cout << "pid: " << pid << std::endl;
-        send(client_socketfd, "received.", 9, 0);
     }
-    testSubTask.join();
 }

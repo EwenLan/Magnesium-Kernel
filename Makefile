@@ -1,6 +1,6 @@
 CXX = g++
 INCLUDE = .
-CPPFLAGS = -O -Wall --std=c++11
+CPPFLAGS = -O -Wall --std=c++17
 all: main
 main: main.o ports.o simulator
 	$(CXX) main.o ports.o -lpthread -o main
