@@ -9,7 +9,7 @@ main.o: main.cpp ports.hpp
 ports.o: ports.cpp ports.hpp
 	$(CXX) -I$(INCLUDE) $(CPPFLAGS) -c ports.cpp
 simulator: Simulator.cpp
-	$(CXX) Simulator.cpp $(CPPFLAGS) -o simulator
+	$(CXX) Simulator.cpp -lpthread $(CPPFLAGS) -o simulator
 clean:
 	rm *.o -f
 	rm main -f
