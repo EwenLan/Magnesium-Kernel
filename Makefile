@@ -14,4 +14,5 @@ clean:
 	rm *.o -f
 	rm main -f
 	rm simulator -f
-	
+repeater: Repeater.cpp
+	$(CXX) Repeater.cpp -lpthread $(CPPFLAGS) -o repeater

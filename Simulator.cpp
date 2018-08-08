@@ -78,6 +78,8 @@ unsigned char TwoChars2Hex(char *str)
 }
 void ListenPort(int listenPort)
 {
+    // Listen the port in another port.
+    // Message will be shown while it got message.
     int host_sockfd = 0;
     int client_sockfd = 0;
     int host_addr_len = 0;
@@ -142,8 +144,9 @@ void SendHexMessage(unsigned char *hexMessage, int sendToPort)
 }
 int main(int argc, char const *argv[])
 {
-    int listenPort = 0;
-    int sendToPort = 0;
+    //Get port infomation.
+    int listenPort = 0; // Receive message from thish port.
+    int sendToPort = 0; // Message will be sent to this port.
     std::cout << "Receive From (Port): ";
     std::cin >> listenPort;
     getchar();
@@ -158,9 +161,12 @@ int main(int argc, char const *argv[])
         char inputChars[512] = {0};
         int p = 0;
         char c = 0;
+        // Get message by keyboard manually.
+        // Message content is the hexadecimal integral.
         c = getchar();
         while (c != '\n' && p < 512)
         {
+            // ignore the spaces.
             if (c != ' ')
             {
                 inputChars[p] = c;
@@ -169,6 +175,7 @@ int main(int argc, char const *argv[])
             c = getchar();
         }
         unsigned char hexMessage[256] = {0};
+        //Convert the string to real integral value.
         for (int i = 0; i < 256; ++i)
         {
             hexMessage[i] = TwoChars2Hex(&inputChars[2 * i]);
