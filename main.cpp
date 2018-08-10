@@ -92,6 +92,7 @@ class session
       public:
         unsigned int code;
         int weight;
+        int smallSumPrice;
         fruit() = default;
         fruit(unsigned int code, int weight)
         {
@@ -102,6 +103,7 @@ class session
     std::vector<fruitPicture> pictureList;
     std::vector<fruit> wholeFruitList;
     int sum_price;
+    unsigned int paymentMethod;
     session() = default;
     int SearchCodeInWholeFruitList(unsigned int code)
     {
@@ -154,9 +156,10 @@ class session
     {
         Refresh();
         sum_price = 0;
-        for (const auto &i : wholeFruitList)
+        for (auto &i : wholeFruitList)
         {
-            sum_price += i.weight * GetUnitPrice(i.code);
+            i.smallSumPrice = i.weight * GetUnitPrice(i.code);
+            sum_price += i.smallSumPrice;
         }
         return sum_price;
     }
@@ -383,12 +386,17 @@ void HandleMessage(unsigned char *message, int local_instruction_loop, std::arra
         unsigned int bry = 0;
         unsigned int current_code = 0;
         int weight = 0;
+        int paymentMethod = 0;
         auto lastPicture = (current_session.pictureList.end() - 1);
+        int z = 0;
         switch (command)
         {
         case 0x0001: // Report PID
             // Argument: 2 bytes unsigned integer value: PID.
             pid_table[from_module] = argument[0] << 8 | argument[1];
+            FillArray(0x0003, sentMessage, 0, 2);
+            FillArray(local_instruction_loop, sentMessage, 2, 2);
+            SendMessage(sentMessage, from_module, local_instruction_loop, port_table);
             std::cout << "PID Table updated. " << std::endl;
             std::cout << "PID Table: " << std::endl;
             for (int i = 1; i < 10; ++i)
@@ -483,7 +491,59 @@ void HandleMessage(unsigned char *message, int local_instruction_loop, std::arra
             FillArray(weight, sentMessage, 6, 4);
             FillArray(current_session.GetUnitPrice(lastPicture->code) * lastPicture->weight, sentMessage, 10, 4);
             SendMessage(sentMessage, ui, local_instruction_loop, port_table);
-            // Stop Here -- Ewen Lan Aug 9 2018
+            break;
+        case 0x0402: // Message From UI: Final estimate request.
+            // Argument: 2 bytes unsigned integer value: payment method code.
+            current_session.paymentMethod = argument[0] << 8 | argument[1];
+            FillArray(0x0104, sentMessage, 0, 2);
+            FillArray(current_session.paymentMethod, sentMessage, 2, 2);
+            FillArray(current_session.SumPrice(), sentMessage, 4, 4);
+            std::cout << "Sum Price: " << std::endl;
+            std::cout << "Fruit Code  |Weight      |Price       " << std::endl;
+            for (int i = 0; i < 38; ++i)
+            {
+                std::cout << "-";
+            }
+            std::cout << std::endl;
+            for (const auto &i : current_session.wholeFruitList)
+            {
+                printf("  %#010x|%12d|%12d\n", i.code, i.weight, i.smallSumPrice);
+            }
+            std::cout << "Total: " << current_session.sum_price << std::endl;
+            std::cout << current_session.wholeFruitList.size() << std::endl;
+            // for (int i = 0; i < (current_session.wholeFruitList.size() < 30) ? current_session.wholeFruitList.size() : 30; ++i) //Segmentation Fault
+            // {
+            //     std::cout << i << std::endl;
+            //     FillArray(current_session.wholeFruitList[i].code, sentMessage, i * 8 + 8, 4);
+            //     FillArray(current_session.wholeFruitList[i].smallSumPrice, sentMessage, i * 8 + 12, 4);
+            // }
+            if (current_session.wholeFruitList.size() <= 30)
+            {
+                z = 8;
+                for (const auto &i : current_session.wholeFruitList)
+                {
+                    FillArray(i.code, sentMessage, z, 4);
+                    FillArray(i.smallSumPrice, sentMessage, z + 4, 4);
+                    z += 8;
+                }
+            }
+            SendMessage(sentMessage, payment, local_instruction_loop, port_table);
+            break;
+        case 0x0403: // Message From UI: Exit
+            // SendCommand(0x0004, debugger, local_instruction_loop, port_table);
+            // TODO: Send command to every modules.
+            break;
+        case 0x0802: // Message From Payment: Success.
+            // TODO: Send all infomation to the database.
+            // SendCommand(0x0005, ui, local_instruction_loop, port_table);
+            // TODO: Send next instruction loop command to every modules.
+            current_session.paymentMethod = 0;
+            current_session.pictureList.clear();
+            current_session.sum_price = 0;
+            current_session.wholeFruitList.clear();
+            break;
+        case 0x0803: // Message From Payment: Failed.
+            // TODO: Deal with paying failed.
             break;
         }
     }
@@ -509,7 +569,6 @@ int main(int argc, char *argv[])
         pid_table[i] = 0x00;
     }
     int instruction_loop = 1;
-    // std::vector<goods> shopping_list;
     std::array<int, 10> port_table = {0};
     int current_goods_code = 0;
     unsigned int current_weight = 0;
@@ -526,8 +585,6 @@ int main(int argc, char *argv[])
     std::array<std::thread, 10> thread_table;
     for (auto &i : status_table)
         i = -1;
-    // for (auto &i : pid_table)
-    //     i = -1;
     // thread_table[debugger] = std::thread(RunModule, debugger, port_table[kernel], port_table[debugger]);
     //TODO: Run all subtasks.
     status_table[debugger] = started;

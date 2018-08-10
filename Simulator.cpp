@@ -127,9 +127,9 @@ void ListenPort(int listenPort)
             {
                 std::cout << "|" << Hex2String(buffer[i * 16 + j]);
             }
-            std::cout << std::endl
-                      << std::endl;
+            std::cout << std::endl;
         }
+        std::cout << std::endl;
     }
 }
 void SendHexMessage(unsigned char *hexMessage, int sendToPort)
